@@ -9,6 +9,9 @@ import os
 import pdfkit
 from pypdf import PdfReader, PdfWriter
 from fpdf import FPDF
+from time import ctime
+import warnings
+warnings.filterwarnings("ignore")
 
 (publicKeyDirector, privateKeyDirector) = rsa.newkeys(2048)
 (publicKeyRegistrar, privateKeyRegistrar) = rsa.newkeys(2048)
@@ -20,6 +23,7 @@ with open('ServerKeys\publicKeyRegistrar.pem','wb') as p:
 databaseFilePtr = open("credentials.json")
 databaseEntries = json.load(databaseFilePtr)
 
+ntpObj = ntplib.NTPClient()
 
 def authenticateClient(authenticationRequest,clientSocket):
     clientName = authenticationRequest['name']
@@ -33,15 +37,18 @@ def authenticateClient(authenticationRequest,clientSocket):
             userEntry = entry
             break
 
+    print("[CLIENT AUTHENTICATION REQUEST]  ClientName: "+clientName+" ClientRollNumber: "+userEntry['rollNumber'])
     authenticationResponse = {}
 
     if foundEntry:
+        print("Client Authentication successfull")
         authenticationResponse['status'] = True
         authenticationResponse['message'] = "client authenticated successfully"
     else:
         authenticationResponse['status'] = False
         authenticationResponse['message'] = "client authentication failed"
-    
+    print()
+    print()
     authenticationResponseString = json.dumps(authenticationResponse)
     clientSocket.send(authenticationResponseString.encode('utf-8'))
     return authenticationResponse, userEntry
@@ -69,7 +76,8 @@ def generatePDF(studentName,studentRollNumber):
 
     finalDetails['Director Signature'] = "Digitally signed by director" 
     finalDetails['registrar Signature'] = "Digitally signed by registrar" 
-    
+    timeRequest = ntpObj.request('europe.pool.ntp.org', version=3)
+    finalDetails['Timestamp'] = ctime(timeRequest.tx_time)
     for key, value in finalDetails.items():
         pdf.cell(200, 10, f"{key}: {value}", ln=1)
     pdfName = studentDetails['name']+"_"+studentDetails['rollNumber']+".pdf"
@@ -98,8 +106,9 @@ def getFileDigest(filePath):
     return h.hexdigest()
 
 def sendDegreeCertificate(clientSocket,p_fileName,filePath):
-    print(filePath)
+    print("Sending the files to client")
     # Retriving file hex digest
+    print("Generating Hexdigest for the file")
     fileHexDigest = getFileDigest(filePath)
     print(fileHexDigest)
     fileName = p_fileName
@@ -110,6 +119,7 @@ def sendDegreeCertificate(clientSocket,p_fileName,filePath):
     # Sending the fileSize
     clientSocket.send(str(fileSize).encode())
     # Generating hmac
+    print("Siging by the private key of Director and Registrar")
     verificationSignatureDirector = rsa.sign(fileHexDigest.encode('ascii'), privateKeyDirector, 'SHA-1')
     verificationSignatureRegistrar = rsa.sign(fileHexDigest.encode('ascii'),privateKeyRegistrar , 'SHA-1')
     # Sending Hmac
@@ -122,7 +132,7 @@ def sendDegreeCertificate(clientSocket,p_fileName,filePath):
     clientSocket.send(b'<END>')
     file.close()
     clientSocket.close()
-
+    print("Sending complete")
 
 def processClient(clientSocket,clientAddress,mutexLock):
     global publicKey, privateKey
@@ -130,10 +140,14 @@ def processClient(clientSocket,clientAddress,mutexLock):
     authenticationResponse, userDetails = authenticateClient(authenticationRequest, clientSocket)
     if not authenticationResponse['status']:
         return
+    
+    print("Generating Encrypted PDF of Degree and Report Card")
     pdfPath,fileName = generatePDF(userDetails['name'], userDetails['rollNumber'])
     pdfPassword = userDetails['dateOfBirth']
     pdfSavePath = "ServerData/EncryptedData/"+fileName
     encryptPDF(pdfPath, pdfPassword,pdfSavePath)
+    print()
+
     sendDegreeCertificate(clientSocket, fileName,pdfSavePath)
 
     
@@ -152,4 +166,5 @@ def Main():
         clientSocket, clientAddress = serverSocket.accept()
         newClientThread = Thread(target= processClient,args= [clientSocket,clientAddress,mutexLock])
         newClientThread.start()
+
 Main()

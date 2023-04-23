@@ -26,11 +26,14 @@ def authenticateWithServer(clientSocket):
     authCredientials['name'] = input()
     print("Enter your roll number")
     authCredientials['rollNumber'] =hashlib.md5(input().encode()).hexdigest()
+    
+    print("Sending authentication request to server")
     authCredientialsString = json.dumps(authCredientials)
     clientSocket.send(authCredientialsString.encode('utf-8'))
     response = clientSocket.recv(6144).decode('utf-8')
     responseJson = json.loads(response)
     print(responseJson['message'])
+    print()
     return responseJson
 
 def getFileDigest(filePath):
@@ -111,6 +114,7 @@ def receiveDegreeCertificate(clientSocket):
 
 def Main():
     time.sleep(2)
+    
     host = "127.0.0.1"
     port = 7000
     s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -119,6 +123,7 @@ def Main():
     authenticationResponse = authenticateWithServer(s)
     if not authenticationResponse['status']:
         return
+
     receiveDegreeCertificate(s)
     s.close()
 

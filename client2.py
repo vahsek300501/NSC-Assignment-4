@@ -67,13 +67,13 @@ def verifyOrigin(clientSocket,clientAddress,mutexLock):
     else:
         print("Message has been tampered with")
     print()
+    print("Verifying HMAC for Client")
     if rsa.verify(fileHexDigest.encode('ascii'), verificationSignatureClient, clientPublicKey) == 'SHA-1':
         print("HMAC Verified for client")
     else:
         print("Message has been tampered with")
     print()
     print()
-
 
 
 def Main():
