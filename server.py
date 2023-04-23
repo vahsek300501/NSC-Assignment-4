@@ -118,10 +118,6 @@ def processClient(clientSocket,clientAddress,mutexLock):
     sendDegreeCertificate(clientSocket, "test.pdf",pdfSavePath)
 
     
-    
-
-
-
 def Main():
     host = ""
     port = 7000
@@ -139,12 +135,3 @@ def Main():
         newClientThread = Thread(target= processClient,args= [clientSocket,clientAddress,mutexLock])
         newClientThread.start()
 Main()
-
-# fileHex = getFileDigest("C:\\Users\\kesha\\Desktop\\Assignment-4\\ServerData\\test.pdf")
-# print(fileHex)
-
-# generatePDF("Keshav", 2019249)
-# pdfPassword = "300501"
-# pdfPath = "ServerData/UnencryptedData/test.pdf"
-# pdfSavePath = "ServerData/EncryptedData/test.pdf"
-# encryptPDF(pdfPath, pdfPassword, pdfSavePath)

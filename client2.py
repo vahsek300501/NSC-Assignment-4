@@ -9,29 +9,14 @@ import pdb
 
 serverPublicKeyDirector = None
 serverPublicKeyRegistrar = None
+clientPublicKey = None
 
 with open('ServerKeys/publicKeyDirector.pem','rb') as p:
     serverPublicKeyDirector = rsa.PublicKey.load_pkcs1(p.read())
 with open('ServerKeys/publicKeyRegistrar.pem','rb') as p:
     serverPublicKeyRegistrar = rsa.PublicKey.load_pkcs1(p.read())
-
-(clientPublicKey,clientPrivateKey) = rsa.newkeys(2048)
-
-with open('ClientKeys\publicKeyClient.pem','wb') as p:
-    p.write(clientPublicKey.save_pkcs1('PEM'))
-
-def authenticateWithServer(clientSocket):
-    authCredientials = {}
-    print("Enter your name")
-    authCredientials['name'] = input()
-    print("Enter your roll number")
-    authCredientials['rollNumber'] =hashlib.md5(input().encode()).hexdigest()
-    authCredientialsString = json.dumps(authCredientials)
-    clientSocket.send(authCredientialsString.encode('utf-8'))
-    response = clientSocket.recv(6144).decode('utf-8')
-    responseJson = json.loads(response)
-    print(responseJson['message'])
-    return responseJson
+with open('ClientKeys/publicKeyClient.pem','rb') as p:
+    clientPublicKey = rsa.PublicKey.load_pkcs1(p.read())
 
 def getFileDigest(filePath):
     h = hashlib.sha256()
@@ -43,14 +28,14 @@ def getFileDigest(filePath):
             h.update(chunk)
     return h.hexdigest()
 
-def receiveDegreeCertificate(clientSocket):
+def verifyOrigin(clientSocket,clientAddress,mutexLock):
     fileName = clientSocket.recv(6144).decode()
     fileSize = clientSocket.recv(6144).decode()
     verificationSignatureDirector = clientSocket.recv(6144)
     verificationSignatureRegistrar = clientSocket.recv(6144)
-    
-    print("Sending file and authentication certificates")
-    receivedFilePath = "ClientReceivedData/"+fileName
+    verificationSignatureClient = clientSocket.recv(6144)
+
+    receivedFilePath = "ClientReceivedData/Copy/"+fileName
     file = open(receivedFilePath,"wb")
     fileBytes = b""
     isFileEnd = False
@@ -68,7 +53,6 @@ def receiveDegreeCertificate(clientSocket):
     time.sleep(2)
     print()
     fileHexDigest = getFileDigest(receivedFilePath)
-    verificationSignatureClient = rsa.sign(fileHexDigest.encode('ascii'), clientPrivateKey, 'SHA-1')
     print(fileHexDigest)
     print()
     print("Verifying hmac for director")
@@ -83,43 +67,29 @@ def receiveDegreeCertificate(clientSocket):
     else:
         print("Message has been tampered with")
     print()
+    if rsa.verify(fileHexDigest.encode('ascii'), verificationSignatureClient, clientPublicKey) == 'SHA-1':
+        print("HMAC Verified for client")
+    else:
+        print("Message has been tampered with")
+    print()
     print()
 
-    print("Sending file to client-2")
-    hostClient = "127.0.0.1"
-    portClient = 8000
-    sClient = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-    sClient.connect((hostClient,portClient))
-    time.sleep(1)
-    sClient.send(fileName.encode())
-    time.sleep(1)
-    sClient.send(str(fileSize).encode())
-    time.sleep(1)
-    sClient.send(verificationSignatureDirector)
-    time.sleep(1)
-    sClient.send(verificationSignatureRegistrar)
-    time.sleep(1)
-    sClient.send(verificationSignatureClient)
-    time.sleep(1)
-    fileSending = open(receivedFilePath,"rb")
-    data = fileSending.read()
-    sClient.sendall(data)
-    sClient.send(b'<END>')
-    fileSending.close()
-    sClient.close()
 
 
 def Main():
-    time.sleep(2)
-    host = "127.0.0.1"
-    port = 7000
-    s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-    s.connect((host,port))
+    host = ""
+    port = 8000
+    mutexLock = Lock()
 
-    authenticationResponse = authenticateWithServer(s)
-    if not authenticationResponse['status']:
-        return
-    receiveDegreeCertificate(s)
-    s.close()
-
+    # Creating a socket
+    serverSocket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    # Binding to host and port
+    serverSocket.bind((host,port))
+    # Listening to client in parallel
+    serverSocket.listen(10)
+    # pdb.set_trace()
+    while(True):
+        clientSocket, clientAddress = serverSocket.accept()
+        newClientThread = Thread(target= verifyOrigin, args= [clientSocket,clientAddress,mutexLock])
+        newClientThread.start()
 Main()
