@@ -8,6 +8,7 @@ import json
 import os
 import pdfkit
 from pypdf import PdfReader, PdfWriter
+from fpdf import FPDF
 
 (publicKeyDirector, privateKeyDirector) = rsa.newkeys(2048)
 (publicKeyRegistrar, privateKeyRegistrar) = rsa.newkeys(2048)
@@ -54,9 +55,27 @@ def generatePDF(studentName,studentRollNumber):
             break
     if studentDetails == None:
         return
-    pdfkit.from_string(json.dumps(studentDetails))
     
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=15)
+    finalDetails = {
+        "Name":val["name"],
+        "Roll Number":val["rollNumber"],
+        "DOB":val["dateOfBirth"]        
+    }
+    for key in val['Subjects'].keys():
+        finalDetails[key] = val['Subjects'][key]
 
+    finalDetails['Director Signature'] = "Digitally signed by director" 
+    finalDetails['registrar Signature'] = "Digitally signed by registrar" 
+    
+    for key, value in finalDetails.items():
+        pdf.cell(200, 10, f"{key}: {value}", ln=1)
+    pdfName = studentDetails['name']+"_"+studentDetails['rollNumber']+".pdf"
+    pdfPath = "ServerData/UnencryptedData/"+pdfName
+    pdf.output(pdfPath)
+    return pdfPath,pdfName    
 
 def encryptPDF(pdfPath,password,pdfName):
     reader = PdfReader(pdfPath)
@@ -111,11 +130,11 @@ def processClient(clientSocket,clientAddress,mutexLock):
     authenticationResponse, userDetails = authenticateClient(authenticationRequest, clientSocket)
     if not authenticationResponse['status']:
         return
+    pdfPath,fileName = generatePDF(userDetails['name'], userDetails['rollNumber'])
     pdfPassword = userDetails['dateOfBirth']
-    pdfPath = "ServerData/UnencryptedData/test.pdf"
-    pdfSavePath = "ServerData/EncryptedData/test.pdf"
+    pdfSavePath = "ServerData/EncryptedData/"+fileName
     encryptPDF(pdfPath, pdfPassword,pdfSavePath)
-    sendDegreeCertificate(clientSocket, "test.pdf",pdfSavePath)
+    sendDegreeCertificate(clientSocket, fileName,pdfSavePath)
 
     
 def Main():
@@ -129,7 +148,6 @@ def Main():
     serverSocket.bind((host,port))
     # Listening to client in parallel
     serverSocket.listen(10)
-    # pdb.set_trace()
     while(True):
         clientSocket, clientAddress = serverSocket.accept()
         newClientThread = Thread(target= processClient,args= [clientSocket,clientAddress,mutexLock])

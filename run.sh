@@ -1,0 +1,7 @@
+mkdir ServerData
+mkdir ServerData/EncryptedData
+mkdir ServerData/UnencryptedData
+mkdir ServerKeys
+mkdir ClientKeys
+mkdir ClientReceivedData
+mkdir ClientReceivedData/Copy
